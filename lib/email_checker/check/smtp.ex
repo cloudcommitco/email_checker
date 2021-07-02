@@ -4,6 +4,8 @@ if match?({:module, Socket.TCP}, Code.ensure_compiled(Socket.TCP)) do
     Check if an emails server is aknowledging an email address.
     """
 
+    require Logger
+
     @behaviour EmailChecker.Check
 
     alias EmailChecker.Tools
@@ -31,16 +33,20 @@ if match?({:module, Socket.TCP}, Code.ensure_compiled(Socket.TCP)) do
     def valid?(email, retries) do
       case smtp_reply(email) do
         nil ->
+          Logger.info("No respnse.")
           false
 
         response ->
+          Logger.info("Checking for 250.")
           Regex.match?(~r/^250 /, response)
       end
     rescue
       Socket.Error ->
+        Logger.info("Socket error. Retrying.")
         valid?(email, retries - 1)
 
       _ ->
+        Logger.info("Address doesnt exist.")
         false
     end
 
@@ -62,6 +68,7 @@ if match?({:module, Socket.TCP}, Code.ensure_compiled(Socket.TCP)) do
 
     defp smtp_reply(email) do
       opts = [packet: :line, timeout: timeout_opt()]
+      Logger.info("Starting TCP conn.")
 
       socket =
         email
@@ -69,18 +76,21 @@ if match?({:module, Socket.TCP}, Code.ensure_compiled(Socket.TCP)) do
         |> TCP.connect!(25, opts)
 
       socket |> Stream.recv!()
-
+      Logger.info("TCP opened.")
       socket |> Stream.send!("HELO #{Tools.domain_name(email)}\r\n")
       socket |> Stream.recv!()
+      Logger.info("HELO sent.")
 
-      socket |> Stream.send!("mail from:<fake@email.com>\r\n")
+      socket |> Stream.send!("mail from:<#{Tools.default_from()}>\r\n")
       socket |> Stream.recv!()
 
+      Logger.info("Mail From set.")
+      Logger.info("Checking RCPT.")
       socket |> Stream.send!("rcpt to:<#{email}>\r\n")
       socket |> Stream.recv!()
     end
 
     defp max_retries, do: Application.get_env(:email_checker, :smtp_retries, 2)
-    defp max_timeout, do: Application.get_env(:email_checker, :timeout_milliseconds, :infinity)
+    defp max_timeout, do: Application.get_env(:email_checker, :timeout_milliseconds, 2000)
   end
 end

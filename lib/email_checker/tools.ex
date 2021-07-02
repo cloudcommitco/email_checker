@@ -27,6 +27,10 @@ defmodule EmailChecker.Tools do
     |> take_lowest_mx_record
   end
 
+  def default_from() do
+    Application.get_env(:email_checker, :default_from_address, "fake@email.com")
+  end
+
   defp lookup_all(domain_name) do
     domain_name
     |> String.to_charlist()
